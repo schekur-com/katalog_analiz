@@ -1,8 +1,7 @@
 streamlit
-google-genai
+openai
 pandas
 matplotlib
 beautifulsoup4
 requests
 pypdf
-
