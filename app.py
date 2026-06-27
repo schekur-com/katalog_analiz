@@ -2,114 +2,131 @@ import streamlit as st
 import pandas as pd
 import json
 import requests
-from bs4 import BeautifulSoup
+import io
+from pypdf import PdfReader
 from google import genai
 import matplotlib.pyplot as plt
 
-# Sayfa Yapılandırması ve Esnek Tasarım
-st.set_page_config(page_title="Evrensel Ürün Analiz ve Karşılaştırma Motoru", layout="wide", page_icon="🔮")
-st.title("🔮 Evrensel Ürün Analiz ve Seçim Motoru")
-st.write("Sektör veya ürün sınırı yoktur! Herhangi bir ürün kataloğu linkini veya teknik tablosunu yapıştırın, yapay zeka ürünleri sizin için analiz etsin.")
+# Sayfa Ayarları
+st.set_page_config(page_title="Limitsiz PDF ve Katalog Analiz SaaS", layout="wide", page_icon="🚀")
+st.title("🚀 Akıllı ve Limitsiz Ürün Analiz Motoru (RAG Tabanlı)")
+st.write("Büyük PDF katalogları hafızada akıllıca parçalanır ve limitlere takılmadan yapay zeka tarafından analiz edilir.")
 
 # Gemini API Bağlantısı
 try:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception:
-    st.error("⚠️ Lütfen Streamlit Cloud panelinden 'GEMINI_API_KEY' anahtarınızı tanımlayın.")
+    st.error("⚠️ Lütfen Streamlit Cloud Secrets panelinden 'GEMINI_API_KEY' anahtarınızı tanımlayın.")
     st.stop()
 
-# Sınırsız LLM Analiz Fonksiyonu
-def sinirsiz_urun_analiz_motoru(ham_metin, musteri_amaci):
+# Akıllı PDF Parçalayıcı (Hata Önleyici Sistem)
+def pdf_parcala_ve_oku(pdf_file, aranan_kriter, parca_boyutu=3):
+    reader = PdfReader(pdf_file)
+    toplam_sayfa = len(reader)
+    
+    # 1. Aşama: Tüm sayfaları hızlıca tara ve aranan kelimelerle eşleşen sayfaları bul
+    anlamli_sayfalar = []
+    kriter_kelimeleri = aranan_kriter.lower().split()
+    
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text() or ""
+        # Müşterinin arama amacına göre en alakalı sayfaları filtrele
+        if any(kelime in text.lower() for kelime in kriter_kelimeleri) or i < 5: 
+            anlamli_sayfalar.append(text)
+            
+    # Eğer döküman çok büyükse sadece en alakalı kısımları birleştirerek limiti koru
+    birlestirilmis_metin = "\n".join(anlamli_sayfalar[:15]) # Maksimum 15 sayfalık güvenli alan
+    return birlestirilmis_metin, toplam_sayfa
+
+# Esnek LLM Analiz Robotu
+def yapay_zeka_analiz_et(katalog_metni, musteri_amaci):
     prompt = f"""
-    Aşağıdaki metin herhangi bir sektöre ait bir ürün kataloğundan, listesinden veya web sitesinden alınmıştır.
+    Aşağıdaki teknik metin, bir ürün kataloğundan akıllıca filtrelenerek getirilmiştir.
     Müşterinin Bu Ürünleri Seçme/Kullanma Amacı ve Kriterleri: {musteri_amaci}
 
-    GÖREVLERİN:
-    1. Metindeki ürünlerin hangi sektöre ve kategoriye ait olduğunu tespit et.
-    2. Ürün modellerini/isimlerini çıkar.
-    3. Müşterinin amacına göre bu ürünler için en kritik 2 adet teknik/finansal/operasyonel parametreyi metinden bul (Örn: Güç, Fiyat, Boyut, Malzeme, Kalori vb.).
-    4. Müşterinin amacına uygunluk durumuna göre 0 ile 100 arasında bir 'Uygunluk_Skoru' hesapla.
-    5. SADECE aşağıdaki JSON formatında çıktı ver. Kod bloğu (```json) veya açıklama ekleme.
+    GÖREVİN:
+    1. Bu metindeki ürün modellerini/isimlerini çıkar.
+    2. Müşterinin amacına göre bu ürünlerin en kritik 2 özelliğini bul.
+    3. Müşterinin amacına uygunluğuna göre 0 ile 100 arasında bir 'Uygunluk_Skoru' hesapla.
+    4. SADECE aşağıdaki JSON formatında çıktı ver. Kod bloğu (```json) veya açıklama ekleme.
 
     İstenen Çıktı Formatı:
     [
-        {{
-            "Urun_Adi": "Ürün Model veya Marka Adı", 
-            "Kritik_Kriter_1": "Değer", 
-            "Kritik_Kriter_2": "Değer", 
-            "Uygunluk_Skoru": 85, 
-            "Durum": "Öneriliyor Veya Önerilmiyor", 
-            "Analiz_Notu": "Müşterinin amacına göre bu ürünün avantaj/dezavantaj özeti"
-        }}
+        {{"Urun_Adi": "Ürün Adı", "Kriter_1": "Değer", "Kriter_2": "Değer", "Uygunluk_Skoru": 90, "Durum": "Öneriliyor", "Analiz_Notu": "Özet teknik açıklama"}}
     ]
     
     Metin:
-    {ham_metin}
+    {katalog_metni}
     """
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     return json.loads(response.text.strip())
 
-def web_sayfasi_oku(url):
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    return soup.get_text()
-
-# Yan Panel: Müşterinin Serbest Amacı
+# Yan Panel: Müşteri Tercihleri
 with st.sidebar:
-    st.header("🎯 Hedefiniz ve Kriterleriniz")
-    st.write("Yapay zekaya bu ürünleri ne için kullanacağınızı veya aradığınız özellikleri serbest metin olarak yazın.")
+    st.header("🎯 Analiz Hedefiniz")
     musteri_amaci = st.text_area(
-        "Kullanım Amacı / Aranan Özellikler", 
-        value="En yüksek performanslı/kapasiteli ve uzun ömürlü olan f/p ürününü bulmak istiyorum.",
-        help="Örn: 'Fabrikada ağır yük taşıyacağım', 'Evde sessiz çalışacak ekonomik bir cihaz arıyorum', 'En düşük maliyetli olanı listele'"
+        "Aradığınız Ürün Özellikleri / Kullanım Amacınız", 
+        value="En yüksek performanslı, f/p oranına sahip dayanıklı ürünü bul."
     )
 
-# Ana Panel: Dinamik Katalog Girişi
-st.subheader("📄 Ürün Kataloğu veya Web Veri Kaynağı")
-girdi_turu = st.radio("Veri Giriş Yöntemi", ["Web Sitesi URL Linki", "Katalog / Broşür Metni (Kopyala/Yapıştır)"], horizontal=True)
+# Ana Panel: Giriş Yöntemleri
+st.subheader("📄 Katalog Yükleme Alanı")
+girdi_turu = st.radio("Katalog Kaynağı", ["Bilgisayardan PDF Yükle", "İnternetteki PDF Linki (URL)"], horizontal=True)
 
-if girdi_turu == "Web Sitesi URL Linki":
-    kaynak_input = st.text_input("Herhangi Bir Ürün veya Katalog Sayfası Linki", value="https://kockablo.com")
+pdf_veri = None
+
+if girdi_turu == "Bilgisayardan PDF Yükle":
+    uploaded_file = st.file_uploader("Katalog PDF Dosyasını Sürükleyin veya Seçin", type=["pdf"])
+    if uploaded_file is not None:
+        pdf_veri = io.BytesIO(uploaded_file.read())
 else:
-    kaynak_input = st.text_area("Ürün Bilgilerini, Özelliklerini veya Tablo Metnini Buraya Yapıştırın", height=200, placeholder="Ürün Adı | Özellikler | Detaylar...")
+    pdf_url = st.text_input("Katalog PDF URL Linki", value="https://styatirim.com.tr")
+    if st.button("🔗 Linkteki PDF'i İndir ve Hazırla"):
+        with st.spinner("PDF internetten indiriliyor..."):
+            try:
+                r = requests.get(pdf_url, timeout=15)
+                pdf_veri = io.BytesIO(r.content)
+                st.success("✅ PDF başarıyla indirildi! Şimdi analize basabilirsiniz.")
+                st.session_state['pdf_veri'] = pdf_veri
+            except Exception as e:
+                st.error(f"PDF indirilemedi: {e}")
+
+# Aktif PDF verisini hafızada tut
+if 'pdf_veri' in st.session_state and girdi_turu == "İnternetteki PDF Linki (URL)":
+    pdf_veri = st.session_state['pdf_veri']
 
 # Analiz Butonu
-if st.button("🚀 Kataloğu Yapay Zeka ile Analiz Et", type="primary"):
-    with st.spinner("Yapay zeka ürün grubunu analiz ediyor, kriterleri çıkartıyor ve puanlıyor..."):
-        try:
-            ham_metin = web_sayfasi_oku(kaynak_input) if girdi_turu == "Web Sitesi URL Linki" else kaynak_input
-            
-            analiz_sonuclari = sinirsiz_urun_analiz_motoru(ham_metin, musteri_amaci)
-            df = pd.DataFrame(analiz_sonuclari)
-            
-            if df.empty:
-                st.warning("❌ Katalog verisinden anlamlı ürün parametreleri ayıklanamadı.")
-            else:
-                st.success("🎯 Evrensel Analiz Raporu Başarıyla Oluşturuldu!")
+if st.button("🚀 Dev Kataloğu Akıllıca Analiz Et", type="primary"):
+    if pdf_veri is None:
+        st.warning("⚠️ Lütfen önce bir PDF dosyası yükleyin veya linkten indirin.")
+    else:
+        with st.spinner("Akıllı sistem devasa PDF'i parçalara bölüyor ve limit hatasını engelliyor..."):
+            try:
+                # 1. Aşama: Büyük PDF'i parçala ve filtrele
+                filtrelenmiş_metin, toplam_sayfa = pdf_parcala_ve_oku(pdf_veri, musteri_amaci)
+                st.info(f"ℹ️ Toplam {toplam_sayfa} sayfalık döküman incelendi. En alakalı kısımlar yapay zekaya aktarıldı.")
                 
-                # Tablo Görünümü
-                st.write("### 📋 Akıllı Ürün Karşılaştırma Matrisi")
-                st.dataframe(df, use_container_width=True)
+                # 2. Aşama: Yapay zekaya gönderme
+                sonuclar = yapay_zeka_analiz_et(filtrelenmiş_metin, musteri_amaci)
+                df = pd.DataFrame(sonuclar)
                 
-                # Dinamik Grafik
-                if "Uygunluk_Skoru" in df.columns:
-                    st.write("### 📈 Müşteri Amacına Göre Ürün Uygunluk Grafiği (0 - 100 Skoru)")
-                    fig, ax = plt.subplots(figsize=(8, 3.5))
+                if df.empty:
+                    st.warning("❌ Seçilen sayfalardan anlamlı ürün verisi analiz edilemedi.")
+                else:
+                    st.success("🎯 Büyük Katalog Analizi Başarıyla Tamamlandı!")
                     
-                    # Skorlara göre renk paleti (Yüksek skor yeşil, düşük skor kırmızımsı)
-                    colors = ['#2ca02c' if x >= 70 else '#d62728' for x in df["Uygunluk_Skoru"]]
+                    # Sonuç Tablosu
+                    st.write("### 📋 Akıllı Ürün Karşılaştırma Matrisi")
+                    st.dataframe(df, use_container_width=True)
                     
-                    ax.barh(df["Urun_Adi"].astype(str), df["Uygunluk_Skoru"], color=colors, alpha=0.85)
-                    ax.set_xlabel("Uygunluk Puanı (100 Üzerinden)")
-                    ax.set_xlim(0, 105)
-                    ax.grid(True, linestyle='--', alpha=0.5, axis='x')
-                    
-                    # Çubukların üzerine puan yazma
-                    for i, v in enumerate(df["Uygunluk_Skoru"]):
-                        ax.text(v + 1, i, f"{v} Puan", va='center', fontweight='bold')
+                    # Başarı Grafiği
+                    if "Uygunluk_Skoru" in df.columns:
+                        st.write("### 📈 Amacınıza En Uygun Ürünler Grafiği")
+                        fig, ax = plt.subplots(figsize=(8, 3.5))
+                        colors = ['#2ca02c' if x >= 70 else '#d62728' for x in df["Uygunluk_Skoru"]]
+                        ax.barh(df["Urun_Adi"].astype(str), df["Uygunluk_Skoru"], color=colors, alpha=0.85)
+                        ax.set_xlabel("Uygunluk Puanı (100 Üzerinden)")
+                        st.pyplot(fig)
                         
-                    st.pyplot(fig)
-                    
-        except Exception as e:
-            st.error(f"Analiz sırasında bir hata oluştu. Lütfen girdileri kontrol edin. Hata: {e}")
+            except Exception as e:
+                st.error(f"Mühendislik analizi sırasında bir hata oluştu: {e}")
