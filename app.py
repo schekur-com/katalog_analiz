@@ -22,7 +22,7 @@ except Exception:
 # Akıllı PDF Parçalayıcı (Hata Önleyici Sistem)
 def pdf_parcala_ve_oku(pdf_file, aranan_kriter, parca_boyutu=3):
     reader = PdfReader(pdf_file)
-    toplam_sayfa = len(reader)
+    toplam_sayfa = len(reader.pages)
     
     # 1. Aşama: Tüm sayfaları hızlıca tara ve aranan kelimelerle eşleşen sayfaları bul
     anlamli_sayfalar = []
