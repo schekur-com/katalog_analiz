@@ -13,10 +13,16 @@ st.title("🚀 Akıllı ve Limitsiz Ürün Analiz Motoru (RAG Tabanlı)")
 st.write("Büyük PDF katalogları hafızada akıllıca parçalanır ve limitlere takılmadan yapay zeka tarafından analiz edilir.")
 
 # Gemini API Bağlantısı
+api_key_input = st.secrets.get("GEMINI_API_KEY", "")
+
+# Eğer Secrets panelinde sorun varsa doğrudan kodun içinden okuması için yedek alan:
+if not api_key_input or api_key_input == "BurayaAIStudiodanAldiginizYeniAnahtarGelecek":
+    api_key_input = "AIzaSy..." # BURAYA çift tırnak içinde gerçek API anahtarınızı (AIzaSy... veya AQ...) yapıştırabilirsiniz.
+
 try:
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-except Exception:
-    st.error("⚠️ Lütfen Streamlit Cloud Secrets panelinden 'GEMINI_API_KEY' anahtarınızı tanımlayın.")
+    client = genai.Client(api_key=api_key_input.strip())
+except Exception as e:
+    st.error(f"⚠️ API Bağlantı hatası: {e}")
     st.stop()
 
 # Akıllı PDF Parçalayıcı (Hata Önleyici Sistem)
