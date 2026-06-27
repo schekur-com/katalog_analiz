@@ -6,92 +6,110 @@ from bs4 import BeautifulSoup
 from google import genai
 import matplotlib.pyplot as plt
 
-# Sayfa Yapılandırması ve Başlıklar
-st.set_page_config(page_title="Evrensel Kablo Analiz Asistanı", layout="wide", page_icon="⚡")
-st.title("⚡ Evrensel Kablo Seçim ve Analiz Asistanı")
-st.write("Herhangi bir kablo kataloğu metnini veya web sayfasını yapıştırın, yapay zeka servo motorunuz için optimum kabloyu hesaplasın.")
+# Sayfa Yapılandırması ve Esnek Tasarım
+st.set_page_config(page_title="Evrensel Ürün Analiz ve Karşılaştırma Motoru", layout="wide", page_icon="🔮")
+st.title("🔮 Evrensel Ürün Analiz ve Seçim Motoru")
+st.write("Sektör veya ürün sınırı yoktur! Herhangi bir ürün kataloğu linkini veya teknik tablosunu yapıştırın, yapay zeka ürünleri sizin için analiz etsin.")
 
-# Gemini API Bağlantısı (Streamlit Secrets üzerinden güvenli bir şekilde okunur)
+# Gemini API Bağlantısı
 try:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception:
     st.error("⚠️ Lütfen Streamlit Cloud panelinden 'GEMINI_API_KEY' anahtarınızı tanımlayın.")
     st.stop()
 
-# Yapay Zeka Parser Fonksiyonu
-def evrensel_katalog_cozucu(ham_metin):
+# Sınırsız LLM Analiz Fonksiyonu
+def sinirsiz_urun_analiz_motoru(ham_metin, musteri_amaci):
     prompt = f"""
-    Aşağıdaki metinden kablo teknik özelliklerini bul ve SADECE istenen JSON formatında geri döndür.
-    Hiçbir açıklama yazma, markdown (```json) kullanma.
+    Aşağıdaki metin herhangi bir sektöre ait bir ürün kataloğundan, listesinden veya web sitesinden alınmıştır.
+    Müşterinin Bu Ürünleri Seçme/Kullanma Amacı ve Kriterleri: {musteri_amaci}
 
-    İstenen Format:
+    GÖREVLERİN:
+    1. Metindeki ürünlerin hangi sektöre ve kategoriye ait olduğunu tespit et.
+    2. Ürün modellerini/isimlerini çıkar.
+    3. Müşterinin amacına göre bu ürünler için en kritik 2 adet teknik/finansal/operasyonel parametreyi metinden bul (Örn: Güç, Fiyat, Boyut, Malzeme, Kalori vb.).
+    4. Müşterinin amacına uygunluk durumuna göre 0 ile 100 arasında bir 'Uygunluk_Skoru' hesapla.
+    5. SADECE aşağıdaki JSON formatında çıktı ver. Kod bloğu (```json) veya açıklama ekleme.
+
+    İstenen Çıktı Formatı:
     [
-        {{"Model": "Kablo Kodu", "Kesit": 1.5, "Direnc": 12.1, "Kapasite": 24}},
-        {{"Model": "Kablo Kodu", "Kesit": 2.5, "Direnc": 7.41, "Kapasite": 32}}
+        {{
+            "Urun_Adi": "Ürün Model veya Marka Adı", 
+            "Kritik_Kriter_1": "Değer", 
+            "Kritik_Kriter_2": "Değer", 
+            "Uygunluk_Skoru": 85, 
+            "Durum": "Öneriliyor Veya Önerilmiyor", 
+            "Analiz_Notu": "Müşterinin amacına göre bu ürünün avantaj/dezavantaj özeti"
+        }}
     ]
-    Kurallar: Kesit mm² olmalı. Direnc 20C DC direnci (ohm/km) olmalı, yoksa tahmini ata. Kapasite max akım (Amper) olmalı.
+    
     Metin:
     {ham_metin}
     """
     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     return json.loads(response.text.strip())
 
-# Web Kazıma Fonksiyonu
 def web_sayfasi_oku(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, 'html.parser')
     return soup.get_text()
 
-# Yan Panel: Motor ve Sistem Girişleri
+# Yan Panel: Müşterinin Serbest Amacı
 with st.sidebar:
-    st.header("🔌 Motor Gereksinimleri")
-    servo_akim = st.number_input("Servo Motor RMS Akımı (Amper)", min_value=1.0, value=20.0, step=1.0)
-    hat_uzunlugu = st.number_input("Kablo Tesisat Uzunluğu (Metre)", min_value=1.0, value=15.0, step=1.0)
-    calisma_voltaji = st.selectbox("Çalışma Voltajı (Volt)", [380, 220, 440], index=0)
+    st.header("🎯 Hedefiniz ve Kriterleriniz")
+    st.write("Yapay zekaya bu ürünleri ne için kullanacağınızı veya aradığınız özellikleri serbest metin olarak yazın.")
+    musteri_amaci = st.text_area(
+        "Kullanım Amacı / Aranan Özellikler", 
+        value="En yüksek performanslı/kapasiteli ve uzun ömürlü olan f/p ürününü bulmak istiyorum.",
+        help="Örn: 'Fabrikada ağır yük taşıyacağım', 'Evde sessiz çalışacak ekonomik bir cihaz arıyorum', 'En düşük maliyetli olanı listele'"
+    )
 
-# Ana Panel: Katalog Girişi
-st.subheader("📄 Katalog Veri Kaynağı")
-girdi_turu = st.radio("Veri Giriş Yöntemi", ["Web Sitesi URL Linki", "Katalog Metni (Kopyala/Yapıştır)"], horizontal=True)
+# Ana Panel: Dinamik Katalog Girişi
+st.subheader("📄 Ürün Kataloğu veya Web Veri Kaynağı")
+girdi_turu = st.radio("Veri Giriş Yöntemi", ["Web Sitesi URL Linki", "Katalog / Broşür Metni (Kopyala/Yapıştır)"], horizontal=True)
 
 if girdi_turu == "Web Sitesi URL Linki":
-    kaynak_input = st.text_input("Ürün veya Katalog Sayfası Linki", value="https://kockablo.com")
+    kaynak_input = st.text_input("Herhangi Bir Ürün veya Katalog Sayfası Linki", value="https://kockablo.com")
 else:
-    kaynak_input = st.text_area("Katalog Tablo Metnini Buraya Yapıştırın", height=200, placeholder="Model | Kesit | Akım Kapasitesi...")
+    kaynak_input = st.text_area("Ürün Bilgilerini, Özelliklerini veya Tablo Metnini Buraya Yapıştırın", height=200, placeholder="Ürün Adı | Özellikler | Detaylar...")
 
-# Analiz Butonu ve Motor Hesaplamaları
-if st.button("🚀 Kataloğu Tara ve Analiz Et", type="primary"):
-    with st.spinner("Yapay zeka kataloğu inceliyor ve mühendislik denklemlerini çözüyor..."):
+# Analiz Butonu
+if st.button("🚀 Kataloğu Yapay Zeka ile Analiz Et", type="primary"):
+    with st.spinner("Yapay zeka ürün grubunu analiz ediyor, kriterleri çıkartıyor ve puanlıyor..."):
         try:
             ham_metin = web_sayfasi_oku(kaynak_input) if girdi_turu == "Web Sitesi URL Linki" else kaynak_input
-            yapilandi = evrensel_katalog_cozucu(ham_metin)
-            df = pd.DataFrame(yapilandi)
             
-            # Kablo filtreleme ve mühendislik hesapları
-            uygunlar = df[df["Kapasite"] >= servo_akim].copy()
+            analiz_sonuclari = sinirsiz_urun_analiz_motoru(ham_metin, musteri_amaci)
+            df = pd.DataFrame(analiz_sonuclari)
             
-            if uygunlar.empty:
-                st.warning("❌ Katalogda bu motor akımını taşıyabilecek büyüklükte bir kablo bulunamadı.")
+            if df.empty:
+                st.warning("❌ Katalog verisinden anlamlı ürün parametreleri ayıklanamadı.")
             else:
-                uygunlar["Isi_Kaybi_Wm"] = (servo_akim ** 2) * (uygunlar["Direnc"] / 1000)
-                uygunlar["Voltaj_Dusumu_Yuzde"] = (2 * hat_uzunlugu * servo_akim * (uygunlar["Direnc"] / 1000) / calisma_voltaji) * 100
+                st.success("🎯 Evrensel Analiz Raporu Başarıyla Oluşturuldu!")
                 
-                en_optimum = uygunlar.sort_values(by="Kesit").iloc[0]
+                # Tablo Görünümü
+                st.write("### 📋 Akıllı Ürün Karşılaştırma Matrisi")
+                st.dataframe(df, use_container_width=True)
                 
-                st.success(f"🎯 ÖNERİ: Sisteminiz için en ekonomik ve güvenli ürün: **{en_optimum['Model']} {en_optimum['Kesit']} mm²**")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("📊 **Katalogdan Elenen/Uygun Görülen Ürün Listesi**")
-                    st.dataframe(uygunlar[["Model", "Kesit", "Kapasite", "Isi_Kaybi_Wm", "Voltaj_Dusumu_Yuzde"]], use_container_width=True)
-                
-                with col2:
-                    st.write("📈 **Kesit Kalınlığına Göre Voltaj Düşüm Eğrisi**")
-                    fig, ax1 = plt.subplots(figsize=(6, 3.5))
-                    ax1.plot(uygunlar["Kesit"].astype(str) + " mm²", uygunlar["Voltaj_Dusumu_Yuzde"], color='#1f77b4', marker='o', label="Voltaj Düşümü %")
-                    ax1.set_ylabel("Voltaj Düşümü (%)", color='#1f77b4')
-                    ax1.tick_params(axis='y', labelcolor='#1f77b4')
+                # Dinamik Grafik
+                if "Uygunluk_Skoru" in df.columns:
+                    st.write("### 📈 Müşteri Amacına Göre Ürün Uygunluk Grafiği (0 - 100 Skoru)")
+                    fig, ax = plt.subplots(figsize=(8, 3.5))
+                    
+                    # Skorlara göre renk paleti (Yüksek skor yeşil, düşük skor kırmızımsı)
+                    colors = ['#2ca02c' if x >= 70 else '#d62728' for x in df["Uygunluk_Skoru"]]
+                    
+                    ax.barh(df["Urun_Adi"].astype(str), df["Uygunluk_Skoru"], color=colors, alpha=0.85)
+                    ax.set_xlabel("Uygunluk Puanı (100 Üzerinden)")
+                    ax.set_xlim(0, 105)
+                    ax.grid(True, linestyle='--', alpha=0.5, axis='x')
+                    
+                    # Çubukların üzerine puan yazma
+                    for i, v in enumerate(df["Uygunluk_Skoru"]):
+                        ax.text(v + 1, i, f"{v} Puan", va='center', fontweight='bold')
+                        
                     st.pyplot(fig)
                     
         except Exception as e:
-            st.error(f"Bir hata oluştu. Lütfen girdiğiniz katalog verisini kontrol edin. Hata: {e}")
+            st.error(f"Analiz sırasında bir hata oluştu. Lütfen girdileri kontrol edin. Hata: {e}")
